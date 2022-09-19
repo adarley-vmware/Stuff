@@ -1,0 +1,49 @@
+  apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: configure-sshd-webhook-ds
+  namespace: tkgs-authentication
+  labels:
+    app: configure-sshd
+spec:
+  selector:
+    matchLabels:
+      app: configure-sshd
+  template:
+    metadata:
+      name: pod-configure-sshd
+      labels:
+        app: configure-sshd
+        hasDNS: "false"
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+      containers:
+      - name: busybox
+        image:  sres.web.cool.com:5000/busybox:1.32
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - while true; do if ! grep "^FipsMode yes" /mnt/etc/ssh/sshd_config ; then echo "FipsMode yes" >> /mnt/etc/ssh/sshd_config ; else echo Yes; fi; if ! grep ^Ciphers /mnt/etc/ssh/sshd_config ; then echo "Ciphers aes128-ctr,aes192-ctr,aes256-ctr" >> /mnt/etc/ssh/sshd_config ; else echo Yes; fi; if ! grep "^HostKeyAlgorithms ssh-rsa" /mnt/etc/ssh/sshd_config ; then echo "HostKeyAlgorithms ssh-rsa" >> /mnt/etc/ssh/sshd_config ; else echo Yes; fi; if ! grep "^KexAlgorithms" /mnt/etc/ssh/sshd_config ; then echo "KexAlgorithms diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha1" >> /mnt/etc/ssh/sshd_config ; else echo Yes; fi; if ! grep "^MACs hmac-sha2-256,hmac-sha1" /mnt/etc/ssh/sshd_config ; then echo "MACs hmac-sha2-256,hmac-sha1" >> /mnt/etc/ssh/sshd_config ; else echo Yes; fi; sleep 10; done
+        volumeMounts:
+        - name: root-filesystem
+          mountPath: /mnt
+        securityContext:
+          privileged: true
+      volumes:
+      - name: root-filesystem
+        hostPath:
+          path: /
+      restartPolicy: Always
+      imagePullSecrets:
+      - name: sres-registry
